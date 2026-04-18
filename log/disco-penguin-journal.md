@@ -14,6 +14,16 @@ sudo apt install curl -y
 curl -fsSL https://claude.ai/install.sh | bash
 ```
 
+## Preferences
+These commands will prevent the desktop from automatically locking when it's idle.
+``` bash
+gsettings set org.gnome.desktop.screensaver lock-enabled false
+gsettings set org.gnome.desktop.session idle-delay 0
+gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-timeout 0
+gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-timeout 0
+
+```
+
 ## Starting state
 
 - `uname -r`: `6.17.0-20-generic` (Ubuntu ships the rolling HWE kernel on 24.04.4; notably newer than the 6.8 series the script's comments implicitly assume, but the `linux-*-hwe-24.04` meta-packages resolve to the 6.17 point release cleanly — see below).
