@@ -1,0 +1,15 @@
+# Editor scratch
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local override files
+.env
+.env.local
+*.local.ps1
+*.local.sh
+
+# OS junk
+.DS_Store
+Thumbs.db
