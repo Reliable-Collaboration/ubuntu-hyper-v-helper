@@ -26,6 +26,7 @@ If you just want to follow the recipe end to end:
 10. **Sandbox hardening** — run [`scripts/guest/04-harden-ufw.sh`](scripts/guest/04-harden-ufw.sh) and [`scripts/host/04-firewall-isolate.ps1`](scripts/host/04-firewall-isolate.ps1) (see [docs/10-sandbox-hardening.md](docs/10-sandbox-hardening.md))
 11. **Checkpoints / backup discipline** — [docs/11-checkpoints-backup.md](docs/11-checkpoints-backup.md)
 12. **tmux workflow** — [docs/12-tmux-workflow.md](docs/12-tmux-workflow.md)
+13. **Run Claude Code in the sandbox** — run [`scripts/guest/07-install-claude-code.sh`](scripts/guest/07-install-claude-code.sh) (see [docs/13-claude-code-in-the-vm.md](docs/13-claude-code-in-the-vm.md))
 
 ## Why these specific choices
 
@@ -48,7 +49,8 @@ The full decision matrix (Gen 2, MS UEFI CA, fixed memory, no nested virt, NAT s
 │   ├── 09-docker.md
 │   ├── 10-sandbox-hardening.md
 │   ├── 11-checkpoints-backup.md
-│   └── 12-tmux-workflow.md
+│   ├── 12-tmux-workflow.md
+│   └── 13-claude-code-in-the-vm.md
 └── scripts/
     ├── host/                   PowerShell — run on the Windows 11 host as Administrator
     │   ├── 01-create-vm.ps1
@@ -63,7 +65,8 @@ The full decision matrix (Gen 2, MS UEFI CA, fixed memory, no nested virt, NAT s
         ├── 03-install-docker.sh
         ├── 04-harden-ufw.sh
         ├── 05-install-tailscale.sh
-        └── 06-prepare-vscode-remote.sh
+        ├── 06-prepare-vscode-remote.sh
+        └── 07-install-claude-code.sh
 ```
 
 ## Conventions
