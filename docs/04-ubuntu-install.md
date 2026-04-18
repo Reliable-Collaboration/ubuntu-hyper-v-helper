@@ -32,8 +32,15 @@ The script:
 5. Installs `openssh-server` and enables it (so VS Code Remote-SSH and tmux-over-SSH work; see [08-vscode-remote.md](08-vscode-remote.md) and [12-tmux-workflow.md](12-tmux-workflow.md)).
 6. Installs basic developer tooling: `git`, `curl`, `wget`, `tmux`, `htop`, `unzip`, `ca-certificates`, `jq`, `build-essential`.
 
-Reboot once after the script finishes so the new kernel modules and udev rule are applied:
+Reboot once after the script finishes. The Hyper-V integration daemons (KVP, fcopy, VSS) fail to start in-place right after install — systemd hasn't wired up the `vmbus!hv_kvp` device unit yet — but they come up cleanly on the next boot.
 
 ```bash
 sudo reboot
+```
+
+After the reboot, confirm the daemons are active:
+
+```bash
+systemctl is-active hv-kvp-daemon hv-fcopy-daemon hv-vss-daemon
+# expect: active / active / active
 ```
