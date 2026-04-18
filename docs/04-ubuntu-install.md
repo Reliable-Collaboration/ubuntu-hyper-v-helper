@@ -38,9 +38,11 @@ Reboot once after the script finishes. The Hyper-V integration daemons (KVP, fco
 sudo reboot
 ```
 
-After the reboot, confirm the daemons are active:
+After the reboot, confirm the daemons are in the expected state:
 
 ```bash
 systemctl is-active hv-kvp-daemon hv-fcopy-daemon hv-vss-daemon
-# expect: active / active / active
+# expect: active / inactive / active
 ```
+
+`hv-fcopy-daemon` stays `inactive` because we keep the host-side "Guest services" integration disabled — see [10-sandbox-hardening.md](10-sandbox-hardening.md). The daemon unit is installed and enabled; it just skips starting until/unless `/dev/vmbus/hv_fcopy` shows up.

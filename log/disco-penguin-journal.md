@@ -98,6 +98,29 @@ Notes:
 
 This pattern is worth promoting to a real script in the `scripts/guest/` set later — it's going to be a per-sandbox step every time.
 
+## Post-reboot verification
+
+After `sudo reboot` and reconnecting:
+
+```
+uptime -p                     → up 1 minute
+systemctl is-active ssh       → active
+/sys/block/sda/queue/scheduler → [none] mq-deadline
+
+hv-kvp-daemon    active
+hv-fcopy-daemon  inactive   ← expected, see below
+hv-vss-daemon    active
+```
+
+`hv-fcopy-daemon` is skipped each boot with:
+
+```
+hv-fcopy-daemon.service - Hyper-V File Copy Protocol Daemon was skipped
+because of an unmet condition check (ConditionPathExists=/dev/vmbus/hv_fcopy).
+```
+
+`/dev/vmbus/` contains only `hv_kvp` and `hv_vss` — no `hv_fcopy`. That device only shows up when the host has **Integration Services → Guest services** enabled on the VM, which exposes `Copy-VMFile`. We deliberately leave it off: it's a host→guest file-push channel, same isolation-leak class as "Shared Drives" (which `docs/10-sandbox-hardening.md` already forbids). Updated both `docs/04-ubuntu-install.md` (corrected the post-reboot expected output) and `docs/10-sandbox-hardening.md` (added "Guest services" to the ❌ list) to reflect this.
+
 ## Next
 
-Reboot, then verify the three hv daemons are active before moving on to `02-install-xrdp.sh`.
+Move on to `02-install-xrdp.sh`.

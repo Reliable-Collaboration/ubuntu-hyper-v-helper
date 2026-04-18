@@ -12,6 +12,7 @@ A note on LAN reach: because the VM is on your home LAN with its own IP (Externa
 ## Host ↔ VM separation rules
 
 - ❌ **Don't enable Hyper-V Shared Drives** (the integration option that mounts host folders into the guest).
+- ❌ **Don't enable the "Guest services" integration service** (Hyper-V Manager → VM → Settings → Management → Integration Services). It's the host→guest file-copy channel behind `Copy-VMFile` / `hv_fcopy_daemon`; same isolation-leak class as Shared Drives. With it off, `hv-fcopy-daemon.service` stays `inactive` by design.
 - ❌ **Don't tick "Drives"** in the Enhanced Session "Local Resources" dialog. (Default off in our setup; double-check.)
 - ❌ **Don't share clipboard** in long unattended runs. For ad-hoc sessions, treat clipboard as one-way (host → VM only when needed) and never paste secrets through it.
 - ❌ **Don't put your real `~/.ssh`, `~/.aws`, `~/.config/gcloud`, browser cookies, password-manager exports, or `.env` files into the VM.** Treat the VM as a fresh user identity.
