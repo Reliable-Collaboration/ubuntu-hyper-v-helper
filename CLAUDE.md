@@ -46,7 +46,7 @@ Both:
 - Lowercase, hyphenated filenames (`07-remote-desktop-options.md`).
 - Title is `# NN — Topic`.
 - Lead with a short purpose sentence, then practical steps. Save deep "why" for a "## Why" or comparison table near the end.
-- Link to other docs with relative paths (`[06-enhanced-session.md](06-enhanced-session.md)`).
+- Link to other docs with relative paths from the file's own location (e.g. inside `docs/`: `[06-enhanced-session.md](06-enhanced-session.md)`; from the repo root: `[06-enhanced-session.md](docs/06-enhanced-session.md)`).
 - Use tables for comparisons.
 - No emoji except sparingly in tables (✅/❌/⚠️) where they aid scanning.
 
