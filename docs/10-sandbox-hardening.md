@@ -4,10 +4,21 @@ The whole reason this VM exists. Goal: even if Claude Code with `--dangerously-s
 
 ## Threat model
 
-- **In scope:** the agent destroys / leaks files inside the VM, exfiltrates secrets it finds inside the VM, opens reverse shells back to the internet.
-- **Out of scope (we want to make it impossible):** the agent reads anything on the Windows host, uses your host's GitHub auth, your host's cloud creds, your host's browser cookies, your real SSH keys.
+- **Untrusted:** the agent running inside the VM.
+- **Trusted (more than the agent):** the Windows host, other devices on your home LAN, the internet.
+- **In scope:** the agent destroys or leaks files inside the VM.
+- **Out of scope (we want to make it impossible):** the agent reads anything on the Windows host, uses your host's GitHub auth, your host's cloud creds, your host's browser cookies, or your real SSH keys.
 
-A note on LAN reach: because the VM is on your home LAN with its own IP (External Switch), the agent can in principle make TCP connections to your router admin page, your NAS, your IoT devices, etc. The defenses below assume "an autonomous agent shouldn't be able to *exfiltrate* or *destroy*" — *not* "an autonomous agent shouldn't be able to ARP-scan your LAN." If you want the latter, segment your network at the router (VLAN / guest network) and put the host on the segregated side.
+The defenses are:
+
+1. **Host ↔ VM isolation** — the agent cannot see or modify anything on the Windows side (rules below).
+2. **No host-equivalent credentials inside the VM** — even if the agent wants to exfiltrate, there's nothing worth taking.
+3. **Snapshots** — a bad run is reversible on the host side in seconds.
+
+## What's explicitly *not* a defense
+
+- **No guest-side firewall allowlisting.** The VM is meant to be fully reachable on your LAN (SSH, RDP, and every dev-server port an application happens to bind). Ubuntu ships `ufw` inactive by default and we leave it that way. If you decide a particular run is risky enough that the agent shouldn't reach the internet, disconnect the VM's vSwitch in Hyper-V Manager — that's a cleaner, more honest kill-switch than a port/protocol allowlist that's both easy to work around and annoying for day-to-day development.
+- **No LAN segmentation in this repo.** Because the VM lives on your home LAN, it can in principle reach your router admin page, NAS, IoT devices, etc. If that matters to you, segment at the router (VLAN / guest network) and put the Windows host on the segregated side. That's a one-time network change, not something this repo scripts.
 
 ## Host ↔ VM separation rules
 
@@ -19,31 +30,20 @@ A note on LAN reach: because the VM is on your home LAN with its own IP (Externa
 
 ## Identity isolation
 
-- **Git / GitHub:** generate an ed25519 SSH key inside the VM. Use it only for the repos the agent needs. Better: create a dedicated GitHub user (e.g. `you-sandbox`) and add it as a collaborator only to the specific repos.
+The one rule: nothing whose blast radius extends beyond the VM belongs in the VM.
+
+- **Git / GitHub:** use a per-VM credential — either an ed25519 SSH key generated inside the VM, or the GitHub CLI's device-code login flow (`gh auth login -w`), which stores a per-VM OAuth token you can revoke independently. Don't paste your personal SSH key or your host's `gh` token into the VM.
 - **NPM / PyPI / cargo:** anonymous read-only is fine for installs. If you need publish rights, use a scoped, single-package token.
 - **Cloud creds:** if a task genuinely needs them, generate a *fine-grained, scoped, short-lived* token for the specific job, paste it as an env var, and revoke it when done.
 - **Docker Hub:** if you need to push, use a personal access token scoped to the specific repo.
-- **Anthropic API key:** see the reconciliation note in [13-claude-code-in-the-vm.md](13-claude-code-in-the-vm.md) — use a *separate* sandbox key. The "no real credentials in the VM" rule above applies to host-equivalent identities; the sandbox API key is by design a sandbox-scoped credential and is fine.
-
-## Network egress allowlist (inside the VM)
-
-Run [`scripts/guest/04-harden-ufw.sh`](../scripts/guest/04-harden-ufw.sh). It sets:
-
-- Default deny in/out.
-- Allow out: DNS (53), HTTP/HTTPS (80/443), SSH out (22), git:// (9418), NTP (123).
-- Allow in: SSH (22) and RDP (3389) from your LAN subnet (auto-detected from the VM's current IP).
-
-If you want to be stricter, switch from "allow all 443" to a DNS-based allowlist using `dnsmasq` + `--ipset`, or put a Squid proxy on the host. That's a heavier setup and usually overkill for personal use.
+- **Anthropic API key:** use a *separate* sandbox API key (see [13-claude-code-in-the-vm.md](13-claude-code-in-the-vm.md)). The "no real credentials in the VM" rule is really "no credentials whose blast radius extends beyond the sandbox" — a sandbox-scoped API key is the exception that proves the rule.
 
 ## Host firewall (Windows side)
 
-You don't *need* a separate firewall script for VM-to-host blocking on the External Switch path — the VM is a regular LAN device, and the host's existing Windows Firewall rules govern what the VM can hit on the host the same way they govern what any other LAN device can hit.
+You don't need any host firewall tweaks for VM-to-host blocking — the VM is a regular LAN device, and Windows Firewall governs it the same way it governs every other LAN device. Two sanity checks worth doing once:
 
-That said, do this once on the host as a sanity check:
-
-1. **Network profile is Private**, not Public, for your LAN connection (`Get-NetConnectionProfile`). The Public profile is more locked-down by default but also blocks things you'll want from the VM (e.g. ICMP).
-2. **Don't run dev servers on the host** that listen on `0.0.0.0`. Bind to `127.0.0.1` so only the host can reach them.
-3. **No file/printer sharing** for the host unless you actually use it (`Get-NetFirewallRule | Where-Object {$_.DisplayGroup -like '*File and Printer*' -and $_.Enabled -eq 'True'}` to inspect).
+1. **Set the network profile to Private** for your LAN connection (`Get-NetConnectionProfile`). Public is locked down enough that it will block things you actually want (e.g. ICMP, mDNS).
+2. **Don't run dev servers on the Windows host bound to `0.0.0.0`** — bind to `127.0.0.1` so only the host can reach them. This keeps the VM from reaching host-local services by accident (or on purpose).
 
 ## Snapshot before each long unattended run
 

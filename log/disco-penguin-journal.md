@@ -121,6 +121,27 @@ because of an unmet condition check (ConditionPathExists=/dev/vmbus/hv_fcopy).
 
 `/dev/vmbus/` contains only `hv_kvp` and `hv_vss` — no `hv_fcopy`. That device only shows up when the host has **Integration Services → Guest services** enabled on the VM, which exposes `Copy-VMFile`. We deliberately leave it off: it's a host→guest file-push channel, same isolation-leak class as "Shared Drives" (which `docs/10-sandbox-hardening.md` already forbids). Updated both `docs/04-ubuntu-install.md` (corrected the post-reboot expected output) and `docs/10-sandbox-hardening.md` (added "Guest services" to the ❌ list) to reflect this.
 
+## Spec correction + doc cleanup pass
+
+Before proceeding to `02-install-xrdp.sh` we paused to reconcile a spec drift that had accreted in the docs. The original hardening doc framed outbound network filtering as a core defense ("reverse shells back to the internet" listed as in-scope) and shipped a `04-harden-ufw.sh` script with an egress allowlist plus an inbound SSH/RDP allowlist scoped to the LAN subnet. Those fits were wrong for the actual use case:
+
+- The VM's purpose is to be fully LAN-reachable on whatever ports an application binds (SSH, RDP, HTTP dev servers, anything else). An inbound allowlist restricted to 22/3389 is user-hostile and counter to the goal.
+- Outbound filtering by port/protocol is a poor fit for the agent-isolation threat model — easy to evade, frustrating for developers who don't know what's blocked. If the kill-switch matters for a given run, disconnecting the VM's vSwitch in Hyper-V Manager is the honest version.
+- "Off-LAN access (coffee shop)" was a hypothetical we don't have: the host is a stationary Windows 11 desktop on wired Ethernet, not a mobile laptop.
+
+Changes (all in this commit):
+
+- Deleted `scripts/guest/04-harden-ufw.sh`.
+- Renumbered `05-prepare-vscode-remote.sh` → `04-prepare-vscode-remote.sh` and `06-install-claude-code.sh` → `05-install-claude-code.sh` so the guest-scripts numbering stays contiguous.
+- Rewrote `docs/10-sandbox-hardening.md` around an explicit threat model (agent-in-VM is untrusted; host / LAN / internet are more trustworthy than the agent) and explicit anti-defenses ("what's not a defense: a guest-side firewall; what's out of scope: LAN segmentation"). Kept the real defenses: host↔VM isolation, no-host-creds-in-VM, snapshots.
+- `docs/05-networking.md`: removed the coffee-shop bullet; rewrote the sandbox-isolation note to not mention ufw; added a new section "F. Reaching apps served from inside the VM" with the bind-to-`0.0.0.0` pattern for Next.js/Vite/Python/Docker.
+- `docs/01-architecture-decisions.md`: added a "Guest firewall — ufw left inactive" row with the rationale.
+- `docs/07-remote-desktop-options.md`: cut the NoMachine/RustDesk/Guacamole/Sunshine alternatives menu. We use xrdp; the alternatives are scope drift for this use case.
+- `docs/13-claude-code-in-the-vm.md`: dropped the `"assuming you ran the hardening script"` caveat and the "don't disable `ufw`" bullet. Script reference updated to `05-install-claude-code.sh`.
+- `docs/08-vscode-remote.md`: script reference updated to `04-prepare-vscode-remote.sh`.
+- `README.md`: quick-start step 8/10/13 updated; repo-layout tree reflects the new guest-script set.
+- `CLAUDE.md`: added two out-of-scope rules so this design decision doesn't drift back in — "don't re-add a guest-side firewall script" and "don't invent mobility/off-LAN scenarios."
+
 ## Next
 
 Move on to `02-install-xrdp.sh`.

@@ -71,3 +71,5 @@ Both:
 - Don't add binary assets (screenshots, ISOs, VHDX templates).
 - Don't restructure into subdirectories beyond `docs/` and `scripts/{host,guest}/` without discussing.
 - Don't re-add NAT switching, port forwarding, or Tailscale — they were removed deliberately as part of the trim. Discuss before reintroducing.
+- Don't re-add a guest-side firewall script or a `ufw` allowlist. The VM is meant to be fully LAN-reachable on every port an application binds; outbound filtering by protocol/port isn't the right layer for the agent-isolation threat model (disconnect the vSwitch if you want a kill-switch). This was considered and removed deliberately.
+- Don't invent mobility / off-LAN scenarios ("laptop at a coffee shop", roaming, etc.). The host is a stationary Windows 11 Pro desktop on wired Ethernet; anything about "what if the VM moved to another network" is out of scope.

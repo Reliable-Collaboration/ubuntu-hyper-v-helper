@@ -50,7 +50,19 @@ ssh youruser@<vm-ip>
 
 That's it. The same path works from your host, your WiFi laptop, your phone (Termius / iSH), etc. — anything on your home LAN.
 
+## F. Reaching apps served from inside the VM
+
+Any dev server or container port inside the VM is LAN-reachable at `http://<vm-ip>:<port>` (or whatever protocol it speaks) as long as two things are true:
+
+1. **The service is bound to `0.0.0.0`, not `127.0.0.1`.** Many dev servers default to loopback-only — you have to opt in to LAN exposure:
+   - Next.js / Vite: `next dev -H 0.0.0.0` / `vite --host 0.0.0.0`.
+   - Node `http.createServer(...).listen(3000)` (no host arg) already binds `0.0.0.0`.
+   - Python `http.server`: `python3 -m http.server 3000 --bind 0.0.0.0`.
+   - Docker: `-p 3000:3000` already publishes on `0.0.0.0` unless you specify `-p 127.0.0.1:3000:3000`.
+2. **Nothing else is blocking the port.** By design, the VM's `ufw` is inactive — there is no guest-side firewall to open holes in. If a port is listening on `0.0.0.0`, the LAN can reach it. This is deliberate (see [10-sandbox-hardening.md](10-sandbox-hardening.md)); if you want to firewall the VM, disconnect its vSwitch in Hyper-V Manager rather than fighting a port allowlist.
+
+To find the VM's LAN IP from inside the VM: `hostname -I` (or `ip -4 addr show`).
+
 ## Notes
 
-- **Off-LAN access** (laptop at a coffee shop, etc.) is intentionally not solved here. If you need it later, Tailscale is the usual answer; this repo's earlier draft included it but we've trimmed it for simplicity.
-- **Sandbox isolation** — putting the VM on the LAN means it can reach every other LAN device (router admin page, NAS, IoT, etc.). The sandbox boundaries enforced here are: (a) `ufw` inside the VM ([10-sandbox-hardening.md](10-sandbox-hardening.md)), (b) not putting host credentials inside the VM, and (c) Windows Firewall on the host with sensible Public/Private profile defaults.
+- **Sandbox isolation** — putting the VM on the LAN means it can reach every other LAN device (router admin page, NAS, IoT, etc.). The sandbox boundaries we rely on are (a) *no host credentials inside the VM*, (b) *no host-shared drives or clipboards in unattended runs*, and (c) host-side Windows Firewall with the network profile set to Private. See [10-sandbox-hardening.md](10-sandbox-hardening.md). If you want the VM unable to talk to other LAN devices, segment at your router (VLAN / guest network) — that's a one-time router change, outside this repo.

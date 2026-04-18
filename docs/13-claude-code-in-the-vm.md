@@ -18,7 +18,7 @@ Before each substantial task: take a host-side snapshot (`scripts/host/snapshot.
 
 ## 1. Install
 
-Run [`scripts/guest/06-install-claude-code.sh`](../scripts/guest/06-install-claude-code.sh). It:
+Run [`scripts/guest/05-install-claude-code.sh`](../scripts/guest/05-install-claude-code.sh). It:
 
 1. Installs **Node.js 22 LTS** from NodeSource (Ubuntu 24.04's distro `nodejs` package is older than what Claude Code expects).
 2. Installs `@anthropic-ai/claude-code` globally with `npm`, using a per-user npm prefix at `~/.npm-global` so global installs don't need `sudo`.
@@ -171,15 +171,14 @@ The blast radius is **the VM**, by design. Recovery options, in order of cheapne
 3. **Nuke the project clone and re-clone:** `rm -rf ~/projects/the-repo && git clone …`.
 4. **Roll the entire VM back to a clean baseline snapshot** (the "golden export" pattern).
 
-The agent **cannot reach** your host's files, your real SSH keys, your browser cookies, or your cloud credentials (assuming you ran the hardening script and are using a separate sandbox API key). It *can*, in principle, reach other devices on your home LAN — see the LAN-reach note in [10-sandbox-hardening.md](10-sandbox-hardening.md) and segment at the router if that matters to you.
+The agent **cannot reach** your host's files, your real SSH keys, your browser cookies, or your cloud credentials — *provided you followed the "don't put real credentials in the VM" rule* in [10-sandbox-hardening.md](10-sandbox-hardening.md) and used a separate sandbox Anthropic API key. It *can* reach other devices on your home LAN; if that matters to you, segment at the router (VLAN / guest network).
 
 ## 9. Things to avoid in the sandbox VM
 
-- ❌ Don't `gh auth login` with your real GitHub user. Use a dedicated `you-sandbox` account or fine-grained PATs.
+- ❌ Don't `gh auth login` with your real GitHub user on the VM. Use a dedicated `you-sandbox` account, a fine-grained PAT, or the per-VM device-code flow (`gh auth login -w`) which stores a token you can revoke independently.
 - ❌ Don't paste your `~/.ssh/id_*` keys into the VM "just for convenience".
 - ❌ Don't `gcloud auth application-default login` with your real account.
 - ❌ Don't enable Hyper-V Shared Drives or Enhanced Session drive redirection.
-- ❌ Don't disable `ufw` and forget to turn it back on.
 - ❌ Don't run `claude` *on the host* after testing in the VM — easy muscle-memory mistake; alias `claude` on the host to print a "use the VM" warning if you want a guard.
 
 ## 10. Pointers

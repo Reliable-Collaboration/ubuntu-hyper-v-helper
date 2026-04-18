@@ -18,12 +18,12 @@ The host is assumed to be on **wired Ethernet** to the home router. The VM uses 
 5. **Networking** (manual: create the External vSwitch in Hyper-V Manager, optionally reserve a DHCP IP) — [docs/05-networking.md](docs/05-networking.md)
 6. **Enhanced Session Mode (xrdp)** — run [`scripts/guest/02-install-xrdp.sh`](scripts/guest/02-install-xrdp.sh) (see [docs/06-enhanced-session.md](docs/06-enhanced-session.md))
 7. **Remote desktop & monitoring options** — [docs/07-remote-desktop-options.md](docs/07-remote-desktop-options.md)
-8. **VS Code Remote-SSH from any machine** — [docs/08-vscode-remote.md](docs/08-vscode-remote.md), and run [`scripts/guest/05-prepare-vscode-remote.sh`](scripts/guest/05-prepare-vscode-remote.sh)
+8. **VS Code Remote-SSH from any machine** — [docs/08-vscode-remote.md](docs/08-vscode-remote.md), and run [`scripts/guest/04-prepare-vscode-remote.sh`](scripts/guest/04-prepare-vscode-remote.sh)
 9. **Docker** — run [`scripts/guest/03-install-docker.sh`](scripts/guest/03-install-docker.sh) (see [docs/09-docker.md](docs/09-docker.md))
-10. **Sandbox hardening** — run [`scripts/guest/04-harden-ufw.sh`](scripts/guest/04-harden-ufw.sh) (see [docs/10-sandbox-hardening.md](docs/10-sandbox-hardening.md))
+10. **Sandbox hardening** (read-only — no script; there is no guest-side firewall by design) — [docs/10-sandbox-hardening.md](docs/10-sandbox-hardening.md)
 11. **Checkpoints / backup discipline** — [docs/11-checkpoints-backup.md](docs/11-checkpoints-backup.md)
 12. **tmux workflow** — [docs/12-tmux-workflow.md](docs/12-tmux-workflow.md)
-13. **Run Claude Code in the sandbox** — run [`scripts/guest/06-install-claude-code.sh`](scripts/guest/06-install-claude-code.sh) (see [docs/13-claude-code-in-the-vm.md](docs/13-claude-code-in-the-vm.md))
+13. **Run Claude Code in the sandbox** — run [`scripts/guest/05-install-claude-code.sh`](scripts/guest/05-install-claude-code.sh) (see [docs/13-claude-code-in-the-vm.md](docs/13-claude-code-in-the-vm.md))
 
 ## Why these specific choices
 
@@ -56,9 +56,8 @@ The full decision matrix (Gen 2, MS UEFI CA, fixed memory, no nested virt, Exter
         ├── 01-bootstrap.sh
         ├── 02-install-xrdp.sh
         ├── 03-install-docker.sh
-        ├── 04-harden-ufw.sh
-        ├── 05-prepare-vscode-remote.sh
-        └── 06-install-claude-code.sh
+        ├── 04-prepare-vscode-remote.sh
+        └── 05-install-claude-code.sh
 ```
 
 ## Conventions

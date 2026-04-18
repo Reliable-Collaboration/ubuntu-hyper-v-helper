@@ -10,7 +10,7 @@ Run VS Code on the host (or any other machine on your LAN) and have it edit, run
 
 ## Prerequisites
 
-The bootstrap script ([`scripts/guest/01-bootstrap.sh`](../scripts/guest/01-bootstrap.sh)) already installs `openssh-server`. Run [`scripts/guest/05-prepare-vscode-remote.sh`](../scripts/guest/05-prepare-vscode-remote.sh) inside the VM to harden sshd (pubkey-only, no root, no password) and to create `~/projects`. It also prints a ready-to-paste SSH config snippet at the end.
+The bootstrap script ([`scripts/guest/01-bootstrap.sh`](../scripts/guest/01-bootstrap.sh)) already installs `openssh-server`. Run [`scripts/guest/04-prepare-vscode-remote.sh`](../scripts/guest/04-prepare-vscode-remote.sh) inside the VM to harden sshd (pubkey-only, no root, no password) and to create `~/projects`. It also prints a ready-to-paste SSH config snippet at the end.
 
 Verify sshd:
 

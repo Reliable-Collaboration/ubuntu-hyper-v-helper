@@ -16,6 +16,7 @@ These are the design choices the rest of this repo assumes.
 | Remote dev IDE | **VS Code Remote-SSH** | Works over the same SSH path; auto-installs vscode-server in the VM; Ubuntu 24.04's glibc 2.39 is well above the 2.28 floor. |
 | Checkpoints | **Production checkpoints**, automatic checkpoints **disabled** | App-consistent via Linux fs-freeze; auto-checkpoints eat disk and can confuse Docker volume state. |
 | Docker | **Docker CE / Engine** from the official apt repo | No nested virt needed; runs at near-native speed. |
+| Guest firewall | **`ufw` left inactive** (Ubuntu default) | The VM must be LAN-reachable on every port an application binds (SSH, RDP, dev servers on arbitrary ports). Outbound filtering by port/protocol doesn't match the agent-isolation threat model — if you want an internet kill-switch, disconnect the VM's vSwitch in Hyper-V Manager. See [10-sandbox-hardening.md](10-sandbox-hardening.md). |
 
 ## Why nested virtualization is left off
 
