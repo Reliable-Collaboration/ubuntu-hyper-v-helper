@@ -4,39 +4,37 @@ Documentation and helper scripts for building an **Ubuntu 24.04 desktop VM on Hy
 
 - runs **Docker** for building/testing containerized apps,
 - is **isolated from the Windows host** (no host file shares, no host credentials),
-- is reachable from the host **and from any other machine on your home WiFi LAN** via SSH/tmux, RDP, and VS Code Remote-SSH,
+- is reachable from the host **and from any other machine on your home LAN** via SSH/tmux, RDP, and VS Code Remote-SSH,
 - can be safely used as a sandbox for **Claude Code with `--dangerously-skip-permissions`**.
+
+The host is assumed to be on **wired Ethernet** to the home router. The VM uses an **External Hyper-V switch** so it gets a DHCP-assigned IP from your router and is directly reachable on the LAN — no NAT, port forwarding, or virtual-router setup.
 
 ## Quick start
 
-If you just want to follow the recipe end to end:
-
 1. **Host prerequisites** — [docs/02-host-prereqs.md](docs/02-host-prereqs.md)
-2. **Create the VM** — run [`scripts/host/01-create-vm.ps1`](scripts/host/01-create-vm.ps1) (see [docs/03-create-vm.md](docs/03-create-vm.md))
+2. **Create the VM** (manual: Hyper-V Manager GUI + a few PowerShell commands) — [docs/03-create-vm.md](docs/03-create-vm.md)
 3. **Install Ubuntu 24.04 Desktop** — [docs/04-ubuntu-install.md](docs/04-ubuntu-install.md)
 4. **First-boot bootstrap inside the VM** — run [`scripts/guest/01-bootstrap.sh`](scripts/guest/01-bootstrap.sh)
-5. **Networking** — pick one path:
-   - **External Switch** (simplest, recommended when your host is wired): [`scripts/host/02b-create-external-switch.ps1`](scripts/host/02b-create-external-switch.ps1)
-   - **NAT switch + LAN port-forward** (more isolated): [`scripts/host/02-create-nat-switch.ps1`](scripts/host/02-create-nat-switch.ps1) and [`scripts/host/03-add-port-forward.ps1`](scripts/host/03-add-port-forward.ps1)
-   - See [docs/05-networking.md](docs/05-networking.md) for the comparison.
+5. **Networking** (manual: create the External vSwitch in Hyper-V Manager, optionally reserve a DHCP IP) — [docs/05-networking.md](docs/05-networking.md)
 6. **Enhanced Session Mode (xrdp)** — run [`scripts/guest/02-install-xrdp.sh`](scripts/guest/02-install-xrdp.sh) (see [docs/06-enhanced-session.md](docs/06-enhanced-session.md))
-7. **Remote desktop & SSH access** — [docs/07-remote-desktop-options.md](docs/07-remote-desktop-options.md)
-8. **VS Code Remote-SSH from any machine** — [docs/08-vscode-remote.md](docs/08-vscode-remote.md)
+7. **Remote desktop & monitoring options** — [docs/07-remote-desktop-options.md](docs/07-remote-desktop-options.md)
+8. **VS Code Remote-SSH from any machine** — [docs/08-vscode-remote.md](docs/08-vscode-remote.md), and run [`scripts/guest/05-prepare-vscode-remote.sh`](scripts/guest/05-prepare-vscode-remote.sh)
 9. **Docker** — run [`scripts/guest/03-install-docker.sh`](scripts/guest/03-install-docker.sh) (see [docs/09-docker.md](docs/09-docker.md))
-10. **Sandbox hardening** — run [`scripts/guest/04-harden-ufw.sh`](scripts/guest/04-harden-ufw.sh) and [`scripts/host/04-firewall-isolate.ps1`](scripts/host/04-firewall-isolate.ps1) (see [docs/10-sandbox-hardening.md](docs/10-sandbox-hardening.md))
+10. **Sandbox hardening** — run [`scripts/guest/04-harden-ufw.sh`](scripts/guest/04-harden-ufw.sh) (see [docs/10-sandbox-hardening.md](docs/10-sandbox-hardening.md))
 11. **Checkpoints / backup discipline** — [docs/11-checkpoints-backup.md](docs/11-checkpoints-backup.md)
 12. **tmux workflow** — [docs/12-tmux-workflow.md](docs/12-tmux-workflow.md)
-13. **Run Claude Code in the sandbox** — run [`scripts/guest/07-install-claude-code.sh`](scripts/guest/07-install-claude-code.sh) (see [docs/13-claude-code-in-the-vm.md](docs/13-claude-code-in-the-vm.md))
+13. **Run Claude Code in the sandbox** — run [`scripts/guest/06-install-claude-code.sh`](scripts/guest/06-install-claude-code.sh) (see [docs/13-claude-code-in-the-vm.md](docs/13-claude-code-in-the-vm.md))
 
 ## Why these specific choices
 
-The full decision matrix (Gen 2, MS UEFI CA, fixed memory, no nested virt, NAT switch on WiFi, xrdp + TigerVNC backend, Docker CE) and the *why* behind each is in [docs/01-architecture-decisions.md](docs/01-architecture-decisions.md).
+The full decision matrix (Gen 2, MS UEFI CA, fixed memory, no nested virt, External Switch, xrdp + TigerVNC backend, Docker CE) and the *why* behind each is in [docs/01-architecture-decisions.md](docs/01-architecture-decisions.md).
 
 ## Repo layout
 
 ```
 .
 ├── README.md
+├── CLAUDE.md
 ├── docs/                       Markdown reference for every step
 │   ├── 01-architecture-decisions.md
 │   ├── 02-host-prereqs.md
@@ -53,25 +51,19 @@ The full decision matrix (Gen 2, MS UEFI CA, fixed memory, no nested virt, NAT s
 │   └── 13-claude-code-in-the-vm.md
 └── scripts/
     ├── host/                   PowerShell — run on the Windows 11 host as Administrator
-    │   ├── 01-create-vm.ps1
-    │   ├── 02-create-nat-switch.ps1        (Path B: more isolated)
-    │   ├── 02b-create-external-switch.ps1  (Path A: simplest when host is wired)
-    │   ├── 03-add-port-forward.ps1         (only needed for Path B)
-    │   ├── 04-firewall-isolate.ps1
-    │   └── 99-snapshot.ps1
+    │   └── snapshot.ps1            (only host script kept; everything else is manual GUI/PS)
     └── guest/                  bash — run inside the Ubuntu VM
         ├── 01-bootstrap.sh
         ├── 02-install-xrdp.sh
         ├── 03-install-docker.sh
         ├── 04-harden-ufw.sh
-        ├── 05-install-tailscale.sh
-        ├── 06-prepare-vscode-remote.sh
-        └── 07-install-claude-code.sh
+        ├── 05-prepare-vscode-remote.sh
+        └── 06-install-claude-code.sh
 ```
 
 ## Conventions
 
-- **Host scripts** are PowerShell `.ps1`; run from an elevated PowerShell prompt.
+- **Host actions** are mostly manual: Hyper-V Manager (GUI) for VM/switch creation, with a small PowerShell block to set the few options the GUI doesn't expose. The one host script kept is `snapshot.ps1` (operational, not configurational).
 - **Guest scripts** are POSIX bash; run inside the Ubuntu VM. They use `sudo` internally — don't run them *as* root, run them as your normal user.
 - All scripts are designed to be **re-runnable** (idempotent where possible).
 - Defaults match the values in `docs/01-architecture-decisions.md`. Override via parameters/env vars at the top of each script.

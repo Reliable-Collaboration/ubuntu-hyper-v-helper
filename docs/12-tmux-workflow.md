@@ -1,6 +1,6 @@
 # 12 — tmux workflow
 
-The pattern: **one long-running tmux server in the VM**, attached to from any machine via SSH.
+The pattern: **one long-running tmux server in the VM**, attached to from any machine on your LAN via SSH.
 
 ## One-time setup
 
@@ -10,7 +10,7 @@ The pattern: **one long-running tmux server in the VM**, attached to from any ma
 ## Daily flow
 
 ```bash
-# From any machine on your LAN/tailnet:
+# From any machine on your LAN:
 ssh ubuntu-sandbox
 
 # Inside the VM:
@@ -87,12 +87,8 @@ claude --dangerously-skip-permissions "implement the feature in TODO.md"
 # Ctrl-b d to detach -- it keeps running
 ```
 
-Reattach later from any machine: `ssh ubuntu-sandbox` → `tmux attach -t claude`.
+Reattach later from any LAN machine: `ssh ubuntu-sandbox` → `tmux attach -t claude`.
 
 ## Reliability tip: keep the SSH connection chatty
 
 Already in the recommended `~/.ssh/config` block (`ServerAliveInterval 30`). Without it, a sleeping laptop or a flaky AP will silently drop the SSH connection, and tmux is happy but you can't see it until the next attach.
-
-## When tmux isn't enough
-
-If you frequently roam between networks (e.g. between WiFi access points or on/off VPN), look at **mosh** instead — it survives IP changes seamlessly and reconnects instantly. Install in the VM with `sudo apt install -y mosh` and add the UDP port range (60000-61000) to ufw and to the host port forward.

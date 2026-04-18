@@ -7,15 +7,24 @@
 | **Standard** | Disk + RAM | Yes | No | Yes | Quick "scratch" experiments where you want to roll back the running state. Risky with Docker (containers may end up in a half-state). |
 | **Production** | Disk only, via fs-freeze on Linux | Yes | Yes | No (boots cold) | What we use. Safe for Docker — containers boot fresh after restore. |
 
-The create-VM script sets the default to **Production**. It also disables **automatic checkpoints** so you don't accumulate one-per-VM-start.
+The VM-creation steps in [03-create-vm.md](03-create-vm.md) set the default to **Production**. They also disable **automatic checkpoints** so you don't accumulate one-per-VM-start.
 
 ## Snapshot before risky work
 
 ```powershell
-.\scripts\host\99-snapshot.ps1 -VMName ubuntu-sandbox -Note "before-claude-refactor"
+.\scripts\host\snapshot.ps1 -VMName ubuntu-sandbox -Note "before-claude-refactor"
 ```
 
-The script timestamps the name, e.g. `ubuntu-sandbox-clean-20260417-1532-before-claude-refactor`.
+The script timestamps the name and sanitises the note, e.g. `ubuntu-sandbox-20260417-1532-before-claude-refactor`. (Notes containing `/`, spaces, or other special characters are converted to `-`.)
+
+You can also run the equivalent by hand if you don't want to use the script:
+
+```powershell
+$VMName = "ubuntu-sandbox"
+$Note   = "before-claude-refactor"
+$stamp  = Get-Date -Format "yyyyMMdd-HHmm"
+Checkpoint-VM -Name $VMName -SnapshotName "$VMName-$stamp-$Note"
+```
 
 ## Restore
 

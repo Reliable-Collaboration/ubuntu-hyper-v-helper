@@ -1,16 +1,18 @@
 # 08 — VS Code Remote-SSH from any machine
 
-Run VS Code on the host (or any other machine on your LAN / tailnet) and have it edit, run, debug, and terminal **inside the VM**. The whole project — including Claude Code, if you use the extension — runs in the VM, not on your host.
+Run VS Code on the host (or any other machine on your LAN) and have it edit, run, debug, and terminal **inside the VM**. The whole project — including Claude Code, if you use the extension — runs in the VM, not on your host.
 
 ## Why this is the right pattern
 
 - **Zero copy of the workspace.** Files live in the VM. Closing the laptop doesn't move them. Multiple clients can connect to the same VM.
 - **Same isolation guarantees.** The IDE is a thin client; the agent and tools all run remote. No host credential leakage just because you opened the editor.
-- **One bootstrap, every machine works.** Same SSH config works from your host laptop, work laptop, even iPad with Code Editor.
+- **One bootstrap, every machine works.** Same SSH config works from every client.
 
 ## Prerequisites
 
-The bootstrap script ([`scripts/guest/01-bootstrap.sh`](../scripts/guest/01-bootstrap.sh)) already installs `openssh-server`. Verify:
+The bootstrap script ([`scripts/guest/01-bootstrap.sh`](../scripts/guest/01-bootstrap.sh)) already installs `openssh-server`. Run [`scripts/guest/05-prepare-vscode-remote.sh`](../scripts/guest/05-prepare-vscode-remote.sh) inside the VM to harden sshd (pubkey-only, no root, no password) and to create `~/projects`. It also prints a ready-to-paste SSH config snippet at the end.
+
+Verify sshd:
 
 ```bash
 sudo systemctl status ssh         # active (running)
@@ -29,18 +31,17 @@ Ubuntu 24.04 ships glibc 2.39 — well above VS Code's 2.28 floor.
    ssh-keygen -t ed25519 -C "$(hostname)-to-ubuntu-sandbox" -f ~/.ssh/ubuntu_sandbox_ed25519
    ```
 
-4. Copy the public key into the VM:
+4. Copy the public key into the VM (replace `<vm-LAN-ip>` with whatever your router gave it / you reserved):
 
    ```bash
-   ssh-copy-id -i ~/.ssh/ubuntu_sandbox_ed25519.pub -p 2222 youruser@<windows-host-LAN-ip>
+   ssh-copy-id -i ~/.ssh/ubuntu_sandbox_ed25519.pub youruser@<vm-LAN-ip>
    ```
 
 5. Add an entry to `~/.ssh/config` so VS Code (and tmux) know how to reach it:
 
    ```sshconfig
    Host ubuntu-sandbox
-       HostName <windows-host-LAN-ip>      # or "ubuntu-sandbox.tailXXXX.ts.net" if Tailscale
-       Port 2222
+       HostName <vm-LAN-ip>
        User youruser
        IdentityFile ~/.ssh/ubuntu_sandbox_ed25519
        IdentitiesOnly yes
@@ -49,6 +50,8 @@ Ubuntu 24.04 ships glibc 2.39 — well above VS Code's 2.28 floor.
    ```
 
 6. From any shell: `ssh ubuntu-sandbox` should drop you into the VM with no password.
+
+If you're using a passphrase-protected key (recommended), make sure `ssh-agent` is running on the client so VS Code Remote-SSH doesn't prompt every connection.
 
 ## Connect VS Code
 
@@ -62,7 +65,7 @@ The same `~/.ssh/config` entry works on every client. VS Code on each machine in
 
 ## Forwarded ports for web preview
 
-When you start a web app inside the VM (e.g. `npm run dev` on `localhost:3000`), VS Code Remote-SSH **auto-forwards** that port back to your client. Just `Cmd/Ctrl-click` the URL in the VS Code terminal — opens in your local browser, served from the VM. No additional Hyper-V port forwards needed for dev preview.
+When you start a web app inside the VM (e.g. `npm run dev` on `localhost:3000`), VS Code Remote-SSH **auto-forwards** that port back to your client. Just `Cmd/Ctrl-click` the URL in the VS Code terminal — opens in your local browser, served from the VM. No additional setup needed for dev preview.
 
 ## Extension placement: workspace vs UI
 
@@ -73,10 +76,6 @@ When you install an extension in a Remote-SSH window, VS Code asks where it shou
 
 For Claude Code with `--dangerously-skip-permissions`, **install it as a workspace extension** so the agent runs inside the VM sandbox. If you install it locally, it'll touch your host filesystem — defeats the entire point.
 
-## Tailscale path (off-LAN)
-
-Once Tailscale is installed in the VM ([`scripts/guest/05-install-tailscale.sh`](../scripts/guest/05-install-tailscale.sh)), you can replace the `HostName` in your SSH config with the tailnet name and drop the `Port` line. Then `ssh ubuntu-sandbox` (and VS Code Remote-SSH → ubuntu-sandbox) works from any of your machines, anywhere, without touching NAT or firewall rules.
-
 ## Alternative IDEs
 
 - **JetBrains Gateway** (free) → same idea for IntelliJ / PyCharm / WebStorm. Pointed at the same SSH config, works the same way.
@@ -85,7 +84,7 @@ Once Tailscale is installed in the VM ([`scripts/guest/05-install-tailscale.sh`]
 
 ## Troubleshooting
 
-- **"Could not establish connection"** → from a shell, run `ssh -v ubuntu-sandbox` and read the verbose output. Almost always: wrong port, wrong key, or sshd not running in the VM.
+- **"Could not establish connection"** → from a shell, run `ssh -v ubuntu-sandbox` and read the verbose output. Almost always: wrong IP, wrong key, or sshd not running in the VM.
 - **`vscode-server` install hangs** → check disk space in the VM (`df -h ~`). The server is ~200 MB but the install pulls more during first-run extension installs.
-- **Connection drops every few minutes** → bump `ServerAliveInterval` lower in the SSH config (e.g. 15) or set `ClientAliveInterval 30` in the VM's `/etc/ssh/sshd_config`.
+- **Connection drops every few minutes** → bump `ServerAliveInterval` lower in the SSH config (e.g. 15) or set `ClientAliveInterval 30` in the VM's `/etc/ssh/sshd_config` (the prepare script already does this).
 - **Lots of CPU in `node` from VS Code** → typically a workspace extension scanning a huge `node_modules`. Add `**/node_modules` to `files.watcherExclude` in the workspace settings.

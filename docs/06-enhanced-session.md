@@ -10,11 +10,14 @@ Enhanced Session Mode lets `vmconnect` (and any RDP client) talk to the VM over 
 
 What it does:
 
-1. Installs `xrdp` and the **TigerVNC** backend (the Xorg backend regressed in Feb 2025; TigerVNC is the current consensus best-perf path).
+1. Installs `xrdp`, `tigervnc-standalone-server`, and `tigervnc-xorg-extension`.
 2. Configures xrdp to listen on both **TCP 3389** and **`vsock://-1:3389`** (the hv_sock transport for Enhanced Session).
-3. Forces a GNOME session via a small `startubuntu.sh` wrapper.
-4. Blacklists `vmw_vsock_vmci_transport` (avoids a known login delay).
-5. Pins `xrdp` and `xorgxrdp` package versions to prevent unattended-upgrades from re-introducing the Xorg regression. Unhold with `sudo apt-mark unhold xrdp xorgxrdp tigervnc-standalone-server`.
+3. **Removes the `[Xorg]` session block from `/etc/xrdp/xrdp.ini`** so the regressed Xorg backend is no longer the default.
+4. **Adds tuning params to the `[Xvnc]` section of `/etc/xrdp/sesman.ini`** (`-CompareFB 1`, `-ZlibLevel 0`, `-geometry 1920x1080`) so the TigerVNC backend gives a usable framerate.
+5. Forces a GNOME session via a small `startubuntu.sh` wrapper.
+6. Installs a PAM stanza that unlocks the GNOME keyring at xrdp login (no per-session password prompt).
+7. Blacklists `vmw_vsock_vmci_transport` (avoids a known login delay).
+8. Pins `xrdp`, `xorgxrdp`, and the TigerVNC packages with `apt-mark hold` so `unattended-upgrades` can't re-introduce the regression. Unhold with `sudo apt-mark unhold xrdp xorgxrdp tigervnc-standalone-server tigervnc-xorg-extension` when you want updates.
 
 After it finishes, **fully shut the VM down** (don't just reboot):
 
@@ -27,7 +30,7 @@ Hyper-V negotiates the hv_sock channel at boot — a power cycle is the cleanest
 ## Connecting
 
 - **From the Hyper-V host:** open Hyper-V Manager → right-click the VM → Connect. The toolbar will show "Enhanced Session" — click it. You'll get a resolution / display options dialog.
-- **From other LAN machines (RDP):** `mstsc` on Windows, *Microsoft Remote Desktop* on macOS, or *Remmina* on Linux, pointed at `<windows-host-LAN-ip>:33890` (the port you forwarded in [05-networking.md](05-networking.md)). This goes over TCP, not hv_sock — works exactly the same to the user, slightly less polished integrations (clipboard depends on the client).
+- **From other LAN machines (RDP):** `mstsc` on Windows, *Microsoft Remote Desktop* on macOS, or *Remmina* on Linux, pointed at `<vm-LAN-ip>:3389`. This goes over TCP, not hv_sock — same UX, slightly less polished integrations (clipboard depends on the client).
 
 ## Sandbox hygiene
 
@@ -46,10 +49,11 @@ sudo systemctl restart xrdp
 
 ## Troubleshooting
 
+- **"Enhanced Session" button greyed out:** check Hyper-V Manager → Hyper-V Settings → Server / User both have Enhanced Session Mode enabled (see [02-host-prereqs.md](02-host-prereqs.md)).
 - **Black screen forever after login:** don't move the mouse during the few seconds after entering credentials — known race in xrdp's GNOME handoff.
-- **"Cannot connect" right after install:** confirm `Set-VM -Name ubuntu-sandbox -EnhancedSessionTransportType HvSocket` ran on the host (the create-VM script does this).
-- **Blank desktop / can't log in remotely while logged in locally:** xrdp doesn't share sessions with the local console. Log out locally before connecting remotely. (This is the long-standing xrdp limitation.)
-- **After an apt upgrade, things broke:** restore configs from `/etc/xrdp/*.bak` (the install script saves them) and reapply the `vsock://` line. Or pin packages (`apt-mark hold ...`) which the script already does.
+- **"Cannot connect" right after install:** confirm `Set-VM -Name ubuntu-sandbox -EnhancedSessionTransportType HvSocket` ran on the host (the PowerShell block in [03-create-vm.md](03-create-vm.md)).
+- **Blank desktop / can't log in remotely while logged in locally:** xrdp doesn't share sessions with the local console. Log out locally before connecting remotely. (Long-standing xrdp limitation.)
+- **After an apt upgrade, things broke:** restore configs from `/etc/xrdp/*.bak` (the install script saves them) and reapply the `vsock://` line. Or re-run the install script — it's idempotent.
 
 ## Skip xrdp entirely?
 

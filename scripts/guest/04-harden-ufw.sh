@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Lock down outbound traffic from the VM with a basic ufw allowlist.
 # Default deny in/out, then explicit allows.
-# Tweak the ALLOWED_OUT_TCP / DNS_SERVERS lists for your needs.
+# Inbound SSH/RDP are restricted to the VM's current LAN subnet
+# (auto-detected from its primary IP).
 # Idempotent.
 
 set -euo pipefail
@@ -11,7 +12,15 @@ if [[ $EUID -eq 0 ]]; then
     exit 1
 fi
 
-NAT_SUBNET="${NAT_SUBNET:-192.168.50.0/24}"
+# Auto-detect the VM's primary IPv4 and infer its /24.
+VM_IP="$(ip -4 -o route get 1 2>/dev/null | awk '{print $7; exit}')"
+if [[ -z "${VM_IP}" ]]; then
+    echo "Could not auto-detect the VM's primary IPv4. Pass LAN_SUBNET=192.168.1.0/24 (or your subnet) to override." >&2
+    exit 1
+fi
+LAN_SUBNET="${LAN_SUBNET:-${VM_IP%.*}.0/24}"
+echo "VM IP: $VM_IP   Inferred LAN subnet: $LAN_SUBNET"
+
 ALLOWED_OUT_TCP=( 80 443 9418 22 )    # HTTP, HTTPS, git://, ssh out (e.g. git over ssh)
 DNS_PORTS=( 53 )
 
@@ -39,9 +48,9 @@ done
 # NTP
 sudo ufw allow out 123/udp comment "NTP"
 
-# Inbound: SSH and RDP only from the NAT subnet (host + port-forwarded LAN)
-sudo ufw allow from "$NAT_SUBNET" to any port 22   proto tcp comment "SSH from NAT subnet"
-sudo ufw allow from "$NAT_SUBNET" to any port 3389 proto tcp comment "RDP from NAT subnet"
+# Inbound: SSH and RDP only from the VM's own LAN subnet
+sudo ufw allow from "$LAN_SUBNET" to any port 22   proto tcp comment "SSH from LAN"
+sudo ufw allow from "$LAN_SUBNET" to any port 3389 proto tcp comment "RDP from LAN"
 
 # Allow loopback (ufw does this by default but be explicit)
 sudo ufw allow in on lo

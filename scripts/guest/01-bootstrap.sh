@@ -16,15 +16,21 @@ sudo apt-get update
 sudo apt-get -y full-upgrade
 
 echo "==> Installing Hyper-V integration tools (HWE kernel)"
+# The kvp daemon and systemd units ship inside linux-cloud-tools-virtual-* on 24.04.
+# (The standalone hv-kvp-daemon-init package from the 16.04 era is no longer needed.)
 sudo apt-get install -y \
     linux-tools-virtual-hwe-24.04 \
-    linux-cloud-tools-virtual-hwe-24.04 \
-    hv-kvp-daemon-init
+    linux-cloud-tools-virtual-hwe-24.04
 
 echo "==> Symlinking hv_kvp_daemon helpers (silences journald 'cannot find' errors)"
-sudo mkdir -p /usr/libexec/hypervkvpd
-sudo ln -sf /usr/sbin/hv_get_dhcp_info /usr/libexec/hypervkvpd/hv_get_dhcp_info
-sudo ln -sf /usr/sbin/hv_get_dns_info  /usr/libexec/hypervkvpd/hv_get_dns_info
+# The daemon looks for these helpers under /usr/libexec/hypervkvpd/, but they ship in /usr/sbin/.
+if [[ -x /usr/sbin/hv_get_dhcp_info ]]; then
+    sudo mkdir -p /usr/libexec/hypervkvpd
+    sudo ln -sf /usr/sbin/hv_get_dhcp_info /usr/libexec/hypervkvpd/hv_get_dhcp_info
+    sudo ln -sf /usr/sbin/hv_get_dns_info  /usr/libexec/hypervkvpd/hv_get_dns_info
+else
+    echo "  hv_get_dhcp_info not found at /usr/sbin/ -- skipping symlink. Check 'dpkg -L linux-cloud-tools-virtual-hwe-24.04' if journald complains later."
+fi
 
 echo "==> Installing 'none' I/O scheduler udev rule (per Microsoft Linux-on-Hyper-V best practice)"
 sudo tee /etc/udev/rules.d/60-ioschedulers.rules >/dev/null <<'EOF'

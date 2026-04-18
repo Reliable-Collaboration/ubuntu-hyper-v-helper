@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Prepare the VM to be a comfortable VS Code Remote-SSH target.
-# Mostly: make sure sshd is up, generate an authorized_keys directory, ensure
-# common globs (~/projects, ~/.config) exist, and print the snippet to add to
-# the CLIENT machine's ~/.ssh/config.
+# Hardens sshd (pubkey-only, no root, no password), creates ~/projects, and
+# prints the SSH-config snippet to add on each client machine.
 # Idempotent.
 
 set -euo pipefail
@@ -17,7 +16,7 @@ sudo apt-get update
 sudo apt-get install -y openssh-server
 sudo systemctl enable --now ssh
 
-echo "==> Hardening sshd: disable root login + password auth, keep ed25519 host keys"
+echo "==> Hardening sshd: disable root login + password auth"
 sudo sed -i 's/^#\?PermitRootLogin .*/PermitRootLogin no/'           /etc/ssh/sshd_config
 sudo sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
 sudo sed -i 's/^#\?ChallengeResponseAuthentication .*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
@@ -43,9 +42,9 @@ chmod 600 "$HOME/.ssh/authorized_keys"
 echo "==> Creating ~/projects (a conventional dir for VS Code workspaces)"
 mkdir -p "$HOME/projects"
 
-# Detect the VM's NAT IP for printing the SSH config snippet
-NAT_IP="$(ip -4 -o addr show | awk '/192\.168\.50\./ {split($4,a,"/"); print a[1]; exit}')"
-NAT_IP="${NAT_IP:-192.168.50.10}"
+# Detect the VM's primary LAN IP for printing the SSH config snippet
+LAN_IP="$(ip -4 -o route get 1 2>/dev/null | awk '{print $7; exit}')"
+LAN_IP="${LAN_IP:-<vm-LAN-ip>}"
 
 cat <<EOF
 
@@ -58,15 +57,14 @@ NEXT STEP (do this on EACH client machine you want to connect from):
        ssh-keygen -t ed25519 -C "\$(hostname)-to-ubuntu-sandbox" -f ~/.ssh/ubuntu_sandbox_ed25519
 
 2) Copy the public key into this VM:
-       ssh-copy-id -i ~/.ssh/ubuntu_sandbox_ed25519.pub -p 2222 $USER@<windows-host-LAN-ip>
+       ssh-copy-id -i ~/.ssh/ubuntu_sandbox_ed25519.pub $USER@$LAN_IP
 
    (Or, if password auth is already disabled and you're locked out, paste the
     pubkey directly into ~/.ssh/authorized_keys via the local console.)
 
 3) Add to ~/.ssh/config on the client:
        Host ubuntu-sandbox
-           HostName <windows-host-LAN-ip>     # or ubuntu-sandbox.<tailnet>.ts.net
-           Port 2222                          # drop this line for the Tailscale path
+           HostName $LAN_IP
            User $USER
            IdentityFile ~/.ssh/ubuntu_sandbox_ed25519
            IdentitiesOnly yes
@@ -81,6 +79,7 @@ NEXT STEP (do this on EACH client machine you want to connect from):
        - F1 -> Remote-SSH: Connect to Host... -> ubuntu-sandbox
        - File -> Open Folder -> /home/$USER/projects (or wherever your code lives)
 
-Reminder: this VM has IP $NAT_IP on the NAT switch.
+This VM's current LAN IP is $LAN_IP. Reserve this IP for the VM's MAC
+in your home router's DHCP settings if you want it to stay stable.
 ---------------------------------------------------------------------
 EOF

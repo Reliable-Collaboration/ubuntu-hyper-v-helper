@@ -23,7 +23,7 @@ You'll need to **log out and back in** (or `newgrp docker`) for the group member
 
 ## Watch out for the snap version
 
-If you ever ran `sudo snap install docker`, the snap version puts data in `/var/snap/docker/common/var-lib-docker/` and conflicts with the apt version. Remove with `sudo snap remove docker` *before* running the install script.
+If you ever ran `sudo snap install docker`, the snap version puts data in `/var/snap/docker/common/var-lib-docker/` and conflicts with the apt version. Remove with `sudo snap remove docker` *before* running the install script. (The install script also detects this and refuses to run if it finds the snap version installed.)
 
 ## Buildx & multi-arch
 
@@ -31,8 +31,7 @@ The script installs `docker-buildx-plugin`, so `docker buildx build --platform l
 
 ## Reaching containerized apps from your LAN
 
-A web app running on `0.0.0.0:3000` inside a container in the VM is reachable:
+A web app running on `0.0.0.0:3000` inside a container in the VM is reachable from any device on your LAN:
 
-- **From the host:** `http://192.168.50.10:3000`.
-- **From other LAN machines:** add a port forward (host `30000` → VM `3000`) with [`scripts/host/03-add-port-forward.ps1`](../scripts/host/03-add-port-forward.ps1), then `http://<host-LAN-ip>:30000`.
-- **From VS Code Remote-SSH:** auto-forwarded to `localhost:3000` on your client (see [08-vscode-remote.md](08-vscode-remote.md)).
+- **Direct on the LAN:** `http://<vm-ip>:3000`. The VM is a normal LAN device, so any other machine on your home network can hit container ports directly.
+- **From VS Code Remote-SSH:** auto-forwarded to `localhost:3000` on your client (see [08-vscode-remote.md](08-vscode-remote.md)). Useful when you're working on a webapp and want it to appear on your local browser.

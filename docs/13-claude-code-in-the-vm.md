@@ -5,7 +5,7 @@ This is the payoff of the rest of this repo. The VM is built so you can let Clau
 ## TL;DR daily flow
 
 ```bash
-# from any client (host laptop / WiFi laptop / phone via Tailscale)
+# from any client on your LAN (host / WiFi laptop / etc.)
 ssh ubuntu-sandbox
 
 # inside the VM
@@ -14,19 +14,19 @@ cd ~/projects/some-repo
 claude --dangerously-skip-permissions
 ```
 
-Before each substantial task: take a host-side snapshot (`scripts/host/99-snapshot.ps1`). After: review the diff in VS Code Remote-SSH, run tests, decide to keep, commit, or roll the snapshot back.
+Before each substantial task: take a host-side snapshot (`scripts/host/snapshot.ps1`). After: review the diff in VS Code Remote-SSH, run tests, decide to keep, commit, or roll the snapshot back.
 
 ## 1. Install
 
-Run [`scripts/guest/07-install-claude-code.sh`](../scripts/guest/07-install-claude-code.sh). It:
+Run [`scripts/guest/06-install-claude-code.sh`](../scripts/guest/06-install-claude-code.sh). It:
 
 1. Installs **Node.js 22 LTS** from NodeSource (Ubuntu 24.04's distro `nodejs` package is older than what Claude Code expects).
-2. Installs `@anthropic-ai/claude-code` globally with `npm`.
+2. Installs `@anthropic-ai/claude-code` globally with `npm`, using a per-user npm prefix at `~/.npm-global` so global installs don't need `sudo`.
 3. Creates a starter `~/.claude/settings.json` with sandbox-appropriate defaults (auto-updates on, audit hook on).
 4. Creates `~/projects/` if missing.
 5. Prints the auth instructions.
 
-Verify:
+Verify (in a new shell, after the script finishes):
 
 ```bash
 claude --version
@@ -43,9 +43,11 @@ You have a few options — pick what fits how you bill:
   export ANTHROPIC_API_KEY="sk-ant-..."
   ```
 
-- **`claude` interactive login flow:** `claude auth login` opens a browser. On a headless setup, copy the URL and complete the flow on a machine that has a browser; paste the resulting token back. (See `claude auth --help` for the latest device-flow mechanics — the CLI evolves quickly.)
+- **`claude` interactive login flow:** check `claude --help` / `claude /login` — the CLI evolves quickly.
 
 **Why a separate key:** if Claude Code on the sandbox does something silly (or a token leaks through prompt injection), you revoke the sandbox key in one click and your host workflow is unaffected.
+
+> **Reconciliation with [10-sandbox-hardening.md](10-sandbox-hardening.md):** that doc says "don't put real credentials in the VM." The Anthropic API key here is a *separate, sandbox-scoped* credential whose only purpose is to be inside the VM — it's the exception that proves the rule. The rule is really "don't put credentials whose blast radius extends beyond the sandbox into the VM." Your *personal* API key, your real GitHub SSH key, your AWS creds — those stay out. A throwaway sandbox key is fine.
 
 ## 3. Settings: `~/.claude/settings.json`
 
@@ -77,10 +79,17 @@ The install script writes a starter file. Annotated:
 Tweak as you go. Useful additions:
 
 - **Model choice:** add a `"model"` field if you want to pin to a specific Claude model rather than letting the CLI default change under you.
-- **Permissions allowlist:** even though you'll mostly run with `--dangerously-skip-permissions` here, the `permissions` block can encode what you *would* allow without prompting for the rare time you run without that flag. See [the Claude Code permissions docs](https://docs.claude.com/en/docs/claude-code/iam) for the schema.
+- **Permissions allowlist:** even though you'll mostly run with `--dangerously-skip-permissions` here, the `permissions` block can encode what you *would* allow without prompting for the rare time you run without that flag. Check the official Claude Code docs for the current schema.
 - **Stop / SubagentStop hooks:** trigger desktop notifications, post to Slack, etc. when a long-running agent finishes.
 
 For anything beyond simple tweaks, ask Claude Code itself (`/config` or `/help`) — the schema evolves.
+
+The audit log grows forever; rotate it occasionally:
+
+```bash
+mv ~/.claude/audit-bash.log ~/.claude/audit-bash.log.$(date +%Y%m%d)
+gzip ~/.claude/audit-bash.log.*
+```
 
 ## 4. Project-level memory: `CLAUDE.md`
 
@@ -124,7 +133,7 @@ claude --dangerously-skip-permissions \
 # Ctrl-b d        # detach -- the session keeps running
 ```
 
-Reattach from any other machine: `ssh ubuntu-sandbox` → `tmux attach -t claude`.
+Reattach from any other LAN machine: `ssh ubuntu-sandbox` → `tmux attach -t claude`.
 
 For *recurring* autonomous runs, Claude Code's `/loop` command lets the agent re-fire a prompt on a schedule and `/schedule` lets you create cron-like triggers. Useful for things like "every 4 hours, check open PRs and respond to review comments." Both should only be used inside this sandbox VM.
 
@@ -150,9 +159,8 @@ Both leave files on the VM, agent execution on the VM, and only the editor UI on
 
 For pure terminal use, the workflow above is all you need. Add a couple of conveniences:
 
-- A shell alias for the common invocation: `alias cc='claude --dangerously-skip-permissions'`.
+- A shell alias for the common invocation: `alias cc='claude --dangerously-skip-permissions'` (the install script already adds this).
 - A tmux config that survives reboots ([12-tmux-workflow.md](12-tmux-workflow.md) covers `tmux-resurrect`).
-- `mosh` if you roam between WiFi networks while attached.
 
 ## 8. Recovery: when things go sideways
 
@@ -163,7 +171,7 @@ The blast radius is **the VM**, by design. Recovery options, in order of cheapne
 3. **Nuke the project clone and re-clone:** `rm -rf ~/projects/the-repo && git clone …`.
 4. **Roll the entire VM back to a clean baseline snapshot** (the "golden export" pattern).
 
-The agent **cannot reach** your host's files, your real SSH keys, your browser cookies, your cloud credentials, or your other LAN devices' admin pages (assuming you ran the hardening scripts and are using a separate sandbox API key). That's the contract this whole repo is designed around.
+The agent **cannot reach** your host's files, your real SSH keys, your browser cookies, or your cloud credentials (assuming you ran the hardening script and are using a separate sandbox API key). It *can*, in principle, reach other devices on your home LAN — see the LAN-reach note in [10-sandbox-hardening.md](10-sandbox-hardening.md) and segment at the router if that matters to you.
 
 ## 9. Things to avoid in the sandbox VM
 
@@ -176,7 +184,6 @@ The agent **cannot reach** your host's files, your real SSH keys, your browser c
 
 ## 10. Pointers
 
-- Claude Code docs: https://docs.claude.com/en/docs/claude-code
-- Settings/permissions reference: https://docs.claude.com/en/docs/claude-code/iam
+- Claude Code docs: https://docs.claude.com/en/docs/claude-code (check the official site for the current settings/permissions schema)
 - This repo's hardening checklist: [10-sandbox-hardening.md](10-sandbox-hardening.md)
 - Snapshot/restore mechanics: [11-checkpoints-backup.md](11-checkpoints-backup.md)

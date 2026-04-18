@@ -1,113 +1,56 @@
-# 05 — Networking: reaching the VM from your LAN
+# 05 — Networking: External Switch on the host's wired NIC
 
-Your situation: **host PC is wired (Ethernet)**, other client machines (laptop, etc.) are on WiFi. That changes which Hyper-V switch type is easiest.
+Goal: the VM appears as a regular device on your home LAN with its own router-issued IP. Reachable from any other machine in the house with `ssh user@<vm-ip>`. No NAT, no port forwarding, no virtual-router setup.
 
-## The three Hyper-V switch options, compared for your setup
+## How the External Switch works
 
-| Switch type | LAN reachable from other machines? | Works because host is wired? | DHCP? | Isolation level |
-|---|---|---|---|---|
-| **Default Switch** (built-in NAT) | ❌ no — host only | n/a | ✅ | Highest (host-only) but useless for your laptop |
-| **External Switch** (bridge to host's Ethernet NIC) | ✅ direct, VM gets its own LAN IP | ✅ Ethernet bridges fine | ✅ from your router | Lowest — VM is just another LAN device |
-| **Custom NAT switch** (Internal + `New-NetNat`) | ✅ via host port-forward | ✅ | ❌ static IP | Medium — VM lives in its own subnet |
+Hyper-V's External vSwitch bridges the VM's virtual NIC onto your physical Ethernet. Your home router sees the VM as another device on the LAN and hands it a DHCP address. From every other machine on the LAN, the VM is just an IP.
 
-The WiFi-bridge trap that breaks External Switch on most laptops doesn't apply to you, because the bridged adapter is your **wired Ethernet** on the host. Other machines connecting *over* WiFi are clients, not bridged hosts — they don't have to share a MAC with the VM.
+This works cleanly because the bridged adapter on the host is **wired Ethernet**. The infamous "WiFi blocks bridged MACs" trap that breaks External Switch on WiFi hosts doesn't apply.
 
-## Pick one based on what you value more
+## A. Create the External Switch (Hyper-V Manager)
 
-**Pick External Switch** if you want:
-- Simplest "it just works" connectivity from any device on your LAN.
-- No port forwarding to manage.
-- DHCP-assigned IP (or a router-side reservation for stability).
-- Tradeoff: the VM is a first-class citizen on your home LAN — it can reach every other device (router admin pages, NAS, IoT gear, etc.) the same way you can. Your sandbox isolation has to come from VM-internal `ufw` rules and your router/firewall, not from the network topology.
+1. Hyper-V Manager → right pane: **Virtual Switch Manager…**
+2. **New virtual network switch** → select **External** → **Create Virtual Switch**.
+3. Name: `External-Wired`.
+4. Connection type: **External network** → pick your wired Ethernet adapter from the dropdown.
+5. Tick **Allow management operating system to share this network adapter** (so your host keeps its network).
+6. **OK**.
 
-**Pick custom NAT switch** if you want:
-- The VM in its own `192.168.50.0/24` subnet, separated from your LAN by a NAT boundary on the host.
-- Easier-to-write Windows Firewall rules to block VM↔host traffic (one vEthernet adapter, one well-defined remote subnet).
-- Tradeoff: have to maintain port-forward rules for each new exposed service (SSH, RDP, dev servers).
+Windows briefly drops the host's network (~1–2 s) while it rebinds the NIC. Don't do this from a machine you're remoted into.
 
-For a serious Claude Code sandbox I lean toward **NAT switch** — the extra isolation is cheap, and the port-forward rules end up being a feature (you have to think before exposing a service). For a generic dev VM, **External Switch** is hard to beat.
+## B. Attach the VM to the new switch
 
-You can also hedge: build it with the External Switch first, and switch to NAT later if you find yourself wanting more separation. The VM doesn't care.
+In Hyper-V Manager → right-click the VM → **Settings…** → **Network Adapter** → switch dropdown → **External-Wired** → **OK**.
 
----
+(Alternatively, one-line PowerShell: `Get-VMNetworkAdapter -VMName ubuntu-sandbox | Connect-VMNetworkAdapter -SwitchName "External-Wired"`.)
 
-## Path A — External Switch (recommended for your wired host)
+## C. Inside the VM: pick up DHCP
 
-Run [`scripts/host/02b-create-external-switch.ps1`](../scripts/host/02b-create-external-switch.ps1) from elevated PowerShell:
-
-```powershell
-.\scripts\host\02b-create-external-switch.ps1 `
-    -SwitchName "External-Wired" `
-    -NetAdapterName "Ethernet" `
-    -VMName ubuntu-sandbox
-```
-
-If you don't pass `-NetAdapterName`, the script auto-picks the first **wired, up, non-virtual** NIC. The script:
-
-1. Creates the External vSwitch bound to your wired NIC (with `AllowManagementOS=true` so the host keeps its network).
-2. Detaches the VM from any previous switch and attaches it here.
-3. Prints the VM's DHCP-assigned IP after a few seconds so you can record it.
-
-**Heads up:** Windows briefly drops the host's network while binding the NIC to the vSwitch (~1-2 s). Don't run this over an active SSH/RDP session into the host.
-
-Inside the VM, NetworkManager will pick up DHCP automatically. To make the IP stable, do **either**:
-
-- A DHCP reservation on your router for the VM's MAC (find it with `ip a` inside the VM, look for the `link/ether` line on the eth interface), **or**
-- Set a manual static IP inside NetworkManager that's outside your router's DHCP pool.
-
-Then from any LAN device:
+NetworkManager handles this automatically once the adapter is up. After the VM finishes booting, check the IP with:
 
 ```bash
-ssh youruser@<vm-LAN-ip>
+ip -4 addr show | awk '/inet /{print $2}'
 ```
 
-No port forwarding needed.
+You should see something like `192.168.1.42/24` (whatever your home subnet is).
 
----
+## D. Make the IP stable
 
-## Path B — Custom NAT switch (more isolated)
+DHCP can re-assign on long uptimes. Pin the address so SSH configs and bookmarks don't break. **One** of:
 
-Same as before — see [`scripts/host/02-create-nat-switch.ps1`](../scripts/host/02-create-nat-switch.ps1) and [`scripts/host/03-add-port-forward.ps1`](../scripts/host/03-add-port-forward.ps1).
+- **DHCP reservation on your router** (recommended): find your router's admin page → DHCP / LAN settings → add a reservation for the VM's MAC. Get the MAC inside the VM with `ip link show | awk '/link\/ether/{print $2}'` (the one on the eth-style interface).
+- **Static IP in NetworkManager**: Settings → Network → wired adapter → ⚙ → IPv4 → Manual. Pick an IP **outside** your router's DHCP pool to avoid clashes. Set the gateway and DNS to your router's IP.
 
-```powershell
-.\scripts\host\02-create-nat-switch.ps1 -SwitchName "NAT-Sandbox" -VMName ubuntu-sandbox
-.\scripts\host\03-add-port-forward.ps1   -NatName   "NAT-Sandbox" -GuestIP 192.168.50.10
+## E. Connect from any LAN device
+
+```bash
+ssh youruser@<vm-ip>
 ```
 
-Inside the VM (NetworkManager → Wired → manual):
+That's it. The same path works from your host, your WiFi laptop, your phone (Termius / iSH), etc. — anything on your home LAN.
 
-| Field | Value |
-|---|---|
-| Address | `192.168.50.10/24` |
-| Gateway | `192.168.50.1` |
-| DNS | `1.1.1.1, 9.9.9.9` |
+## Notes
 
-Then from another LAN box: `ssh -p 2222 youruser@<windows-host-LAN-ip>`.
-
-### Gotchas with NAT switch
-
-- **One `New-NetNat` per host.** If WSL2 / Docker Desktop / an older Hyper-V VM already created one, `New-NetNat` will fail. `Get-NetNat` to inspect.
-- The new vEthernet defaults to *Public* profile in Windows Firewall; the script sets it to *Private*. Re-run the script after host reboots if connectivity goes weird.
-
----
-
-## Either path: add Tailscale on top
-
-Tailscale doesn't replace either switch — but it gives you a stable hostname that works **from anywhere** (your laptop on WiFi at home, your laptop at a coffee shop, your phone, etc.) without any of the above NAT/port-forward configuration applying to *that* path.
-
-- Run [`scripts/guest/05-install-tailscale.sh`](../scripts/guest/05-install-tailscale.sh) inside the VM.
-- Then: `ssh youruser@ubuntu-sandbox` (MagicDNS) from any tailnet device.
-- In your tailnet ACLs, restrict access so only your own user/devices can reach the VM.
-
-Recommended layered design:
-
-- **External Switch** (or NAT switch) → handles same-LAN access.
-- **Tailscale** → handles off-LAN access and provides a single, stable hostname your SSH config and VS Code Remote-SSH can target everywhere.
-
-## Sandbox networking checklist
-
-Whichever switch you pick, the sandbox isolation comes from:
-
-1. **`ufw` inside the VM** with default-deny in/out — see [`scripts/guest/04-harden-ufw.sh`](../scripts/guest/04-harden-ufw.sh).
-2. **Windows Firewall** rules blocking VM→host traffic — see [`scripts/host/04-firewall-isolate.ps1`](../scripts/host/04-firewall-isolate.ps1). (Easier to scope cleanly when using the NAT switch, since the vEthernet adapter is dedicated.)
-3. **Don't put real credentials inside the VM** — see [10-sandbox-hardening.md](10-sandbox-hardening.md).
+- **Off-LAN access** (laptop at a coffee shop, etc.) is intentionally not solved here. If you need it later, Tailscale is the usual answer; this repo's earlier draft included it but we've trimmed it for simplicity.
+- **Sandbox isolation** — putting the VM on the LAN means it can reach every other LAN device (router admin page, NAS, IoT, etc.). The sandbox boundaries enforced here are: (a) `ufw` inside the VM ([10-sandbox-hardening.md](10-sandbox-hardening.md)), (b) not putting host credentials inside the VM, and (c) Windows Firewall on the host with sensible Public/Private profile defaults.

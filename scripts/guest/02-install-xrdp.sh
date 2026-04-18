@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Install xrdp + TigerVNC backend for Hyper-V Enhanced Session Mode.
-# Configures hv_sock listener so vmconnect's "Enhanced Session" works.
-# Switches the backend from Xorg (regressed in Feb 2025) to TigerVNC.
+# Install xrdp for Hyper-V Enhanced Session Mode, switching the backend from
+# Xorg (which regressed in Feb 2025) to TigerVNC.
+# Configures the hv_sock listener so vmconnect's "Enhanced Session" works.
 # Idempotent.
 
 set -euo pipefail
@@ -27,6 +27,49 @@ if ! grep -q 'vsock://' /etc/xrdp/xrdp.ini; then
     sudo sed -i 's|^port=3389$|port=3389 vsock://-1:3389|' /etc/xrdp/xrdp.ini
 fi
 
+echo "==> Removing the [Xorg] session entry from xrdp.ini (the Feb-2025-regressed backend)"
+# Strip the [Xorg] block (and its trailing blank line) from xrdp.ini if present.
+sudo python3 - <<'PY'
+import re, pathlib
+p = pathlib.Path('/etc/xrdp/xrdp.ini')
+text = p.read_text()
+# Remove a [Xorg] ... block that ends just before the next [section] or EOF.
+new = re.sub(r'(?ms)^\[Xorg\].*?(?=^\[|\Z)', '', text)
+if new != text:
+    p.write_text(new)
+    print("  removed [Xorg] block")
+else:
+    print("  [Xorg] block already absent")
+PY
+
+echo "==> Tuning [Xvnc] (TigerVNC) parameters in sesman.ini for usable framerate"
+sudo python3 - <<'PY'
+import re, pathlib
+p = pathlib.Path('/etc/xrdp/sesman.ini')
+text = p.read_text()
+# Find the [Xvnc] section and ensure our tuning params are present.
+m = re.search(r'(?ms)^\[Xvnc\].*?(?=^\[|\Z)', text)
+if not m:
+    raise SystemExit("[Xvnc] section not found in sesman.ini -- aborting")
+section = m.group(0)
+extra_params = [
+    "param=-CompareFB",
+    "param=1",
+    "param=-ZlibLevel",
+    "param=0",
+    "param=-geometry",
+    "param=1920x1080",
+]
+to_add = [p for p in extra_params if p not in section]
+if to_add:
+    section_new = section.rstrip() + "\n" + "\n".join(to_add) + "\n\n"
+    text = text[:m.start()] + section_new + text[m.end():]
+    p.write_text(text)
+    print(f"  added {len(to_add)} param line(s) to [Xvnc]")
+else:
+    print("  [Xvnc] params already tuned")
+PY
+
 echo "==> Renaming Fuse mount (avoids 'thinclient_drives' weirdness)"
 sudo sed -i 's|^FuseMountName=thinclient_drives|FuseMountName=shared-drives|' /etc/xrdp/sesman.ini || true
 
@@ -39,6 +82,24 @@ exec /etc/xrdp/startwm.sh
 EOF
 sudo chmod a+x /etc/xrdp/startubuntu.sh
 sudo sed -i 's|startwm|startubuntu|g' /etc/xrdp/sesman.ini
+
+echo "==> Installing PAM stanza so the GNOME keyring unlocks at xrdp login (no per-session prompt)"
+sudo tee /etc/pam.d/xrdp-sesman >/dev/null <<'EOT'
+#%PAM-1.0
+auth     required  pam_env.so readenv=1
+auth     required  pam_env.so readenv=1 envfile=/etc/default/locale
+@include common-auth
+-auth    optional  pam_gnome_keyring.so
+-auth    optional  pam_kwallet5.so
+@include common-account
+@include common-password
+session    required     pam_limits.so
+session    required     pam_loginuid.so
+session    optional     pam_lastlog.so quiet
+@include common-session
+-session optional  pam_gnome_keyring.so auto_start
+-session optional  pam_kwallet5.so auto_start
+EOT
 
 echo "==> Blacklisting vmw_vsock_vmci_transport (avoids known login delay)"
 echo "blacklist vmw_vsock_vmci_transport" | \
@@ -53,7 +114,7 @@ sudo systemctl restart xrdp
 
 cat <<'EOM'
 
-xrdp configured. Important next step:
+xrdp configured with TigerVNC backend. Important next step:
 
     sudo poweroff
 
@@ -63,8 +124,7 @@ Enhanced Session Mode.
 
 Once back up:
   - From the host:  Hyper-V Manager -> Connect -> click "Enhanced Session" in toolbar.
-  - From LAN:       mstsc / Microsoft Remote Desktop / Remmina to <host>:33890
-                    (assuming you've run scripts/host/03-add-port-forward.ps1).
+  - From LAN:       mstsc / Microsoft Remote Desktop / Remmina to <vm-LAN-ip>:3389
 
 For sandbox use:
   - In vmconnect "Show Options -> Local Resources", UNCHECK Drives.
