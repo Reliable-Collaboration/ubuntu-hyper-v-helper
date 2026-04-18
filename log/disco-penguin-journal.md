@@ -68,6 +68,36 @@ So the KVP bits are live at the kernel level; only systemd's `.device` unit hasn
 
 **Takeaway for the docs:** the reboot after `01-bootstrap.sh` is not optional on a first run. Skipping it leaves the integration daemons inactive until next boot. Current `docs/04-ubuntu-install.md` already says "Reboot once after the script finishes"; that wording is correct, not just a nicety.
 
+## GitHub CLI + push auth
+
+The VM was cloned with HTTPS and had no credential helper, so pushing the first commit failed. We installed the GitHub CLI from the official apt repo and used its device-code login flow — this avoids pasting a PAT into shell history and gives us a per-VM credential that's trivially revocable from GitHub's UI.
+
+```bash
+# From https://cli.github.com/ install instructions
+sudo mkdir -p -m 755 /etc/apt/keyrings
+curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+  | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+  | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+sudo apt-get update && sudo apt-get install -y gh
+
+# Login (device-code flow — prints one-time code + URL, poll for approval)
+gh auth login -h github.com -p https -w
+
+# Wire gh as git's credential helper for github.com / gist.github.com
+gh auth setup-git
+```
+
+Notes:
+
+- Git commit identity is configured repo-locally to `waddle-p <waddle-bot@rcc.team>` (set with `git config user.{name,email}`, no `--global`). This keeps the disposable-VM commits visibly attributed and doesn't leak to anything cloned into this VM later.
+- The gh OAuth token lives in `~/.config/gh/hosts.yml` in plaintext (gh warns about this on Linux — no keyring). Acceptable for a sandbox VM we'll nuke. **Do not commit that file.**
+- Token scopes granted: `gist, read:org, repo` (gh's default for the device-code flow).
+- Rotation: `gh auth logout` on the VM + "Revoke" the token under GitHub → Settings → Applications when the VM is retired.
+
+This pattern is worth promoting to a real script in the `scripts/guest/` set later — it's going to be a per-sandbox step every time.
+
 ## Next
 
 Reboot, then verify the three hv daemons are active before moving on to `02-install-xrdp.sh`.
